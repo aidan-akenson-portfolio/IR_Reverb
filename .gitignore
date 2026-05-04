@@ -1,3 +1,4 @@
 venv/
 .vscode/
 .gitattributes
+.gitignore
