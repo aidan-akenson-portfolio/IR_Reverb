@@ -1,12 +1,18 @@
 import numpy as np
 from scipy import signal as sg
 import soundfile as sf
+import pathlib as pl
 
+DEFAULT_BITRATE = 48000
+
+# FIXME implement
+DRY_WET = 0.5               # 0 = Dry
+                            # 1 = Wet
 
 # Generate a variable-length 440 Hz sine wave. Used if user does not supply an input.
 SINE_LEN_SECONDS = 2
-def sine_440(bitrate: int = 44800):
-    sine_wave = (np.sin(2 * np.pi * 440 * np.arange(bitrate * SINE_LEN_SECONDS) / bitrate) * 32767).astype(np.int16)
+def sine_440(bitrate: int = DEFAULT_BITRATE):
+    sine_wave = (np.sin(2 * np.pi * 440 * np.arange(bitrate * SINE_LEN_SECONDS) / bitrate))
 
     # Smooth heads and tails
     fade_len = bitrate // 10
@@ -14,9 +20,17 @@ def sine_440(bitrate: int = 44800):
         sine_wave[i] *= (i % fade_len) / fade_len
         sine_wave[-i] *= (i % fade_len) / fade_len
 
-    sf.write(file="sine_440.wav", data=sine_wave, samplerate=bitrate)
-    return sf.SoundFile(file="sine_440.wav")
+    # Make stereo. 
+    # 
+    # Soundfile uses format (samples, channels) so transposition is needed.
+    # If audio library changes when converting to realtime, this transposition
+    # may become unnecessary.
+    sine_wave = np.array([sine_wave, sine_wave]).T
 
+    # FIXME remove once no longer needed
+    sf.write(file="sine_440.wav", data=sine_wave, samplerate=bitrate)
+
+    return sine_wave
 
 class IR():
     def __init__(self, ir_file: str = "", input: str = ""):
@@ -24,38 +38,48 @@ class IR():
         # Select appropriate impulse response
         match ir_file:
             case "":
-                self._ir = sf.SoundFile(file="white_noise_massive.wav")
+                self._ir, self._ir_bitrate = sf.read(file="ir_demo_1_filtered_white_noise_massive.wav", always_2d=True)
             case _:
                 print("Command line arguments and user-supplied impulse responses are currently unsupported!")
 
         # Import the input signal as a SoundFile object, or use a sine wave if none provided
-        if input != "":
-            self._input = sf.SoundFile(file=input)
-        else:
-            self._input = sine_440()
-        self._bitrate = self._input.samplerate
+        match input:
+            case "":
+                self._input = sine_440()
+                self._input_bitrate = DEFAULT_BITRATE
+            case "sine":
+                self._input = sine_440()
+                self._input_bitrate = DEFAULT_BITRATE
+            case "arp":
+                self._input, self._input_bitrate = sf.read(file="input_demo_1_arp.wav", always_2d=True)
+            case _:
+                assert pl.Path(input).resolve().is_file(), f"File {input} does not exist!"
+                self._input, self._input_bitrate = sf.read(file=input, always_2d=True)
+                
 
-        # FIXME do the actual convolution operations!
-        self._output = self._input
-        #self.convolve()
+        # If bitrates do not match, do not proceed
+        # FIXME convert ir to match input bitrate (low priority)
+        assert self._input_bitrate == self._ir_bitrate, f"Input bitrate ({self._input_bitrate}) does not match IR bitrate ({self._ir_bitrate})"
+        # If numeric types do not match, do not proceed
+        # FIXME convert ir to match input type (low priority)
+        assert type(self._ir[0][0]) == type(self._input[0][0]), f"Input type ({type(self._ir[0][0])}) does not match IR type ({type(self._input[0][0])})"
 
-    # Play the dry input signal
-    # FIXME make realtime instead of writing a file!
-    def play_dry(self):
-        sf.write(file="dry_output.wav", data=self._input.read(dtype=np.int16), samplerate=self._bitrate)   # FIXME add autodetection for inputs that are not int16!
 
-    # Play the wet output signal 
-    # FIXME make realtime instead of writing a file!
-    # FIXME add dry-wet control!
-    def play_wet(self):
-        sf.write(file="wet_output.wav", data=self._output.read(dtype=np.int16), samplerate=self._bitrate)   # FIXME why is only this one creating a 0 second wav file?
+        # Normalize
+        # FIXME switch to a realtime audio library
+        non_normalized_output = sg.convolve(in1=self._ir, in2=self._input)
+        self._output = non_normalized_output / np.max(np.abs(non_normalized_output))
 
-    # FIXME do the actual convolution operations!
-    def convolve(self):
-        pass
+
+        # Write to output file
+        # FIXME Switch to a realtime audio library
+        input_name = input.replace("\\", "/").split("/")[-1].replace(".wav", "").replace(".WAV", "")
+        file_name = f"output_{input_name}.wav"
+        sf.write(file=file_name, 
+                data=(self._output), 
+                samplerate=self._input_bitrate)
         
 if __name__ == "__main__":
-    ir = IR()
-    ir.play_dry()
-    ir.play_wet()
+    ir = IR(input="sine")
+    ir = IR(input="arp")
     quit()
