@@ -1,8 +1,6 @@
 # IR_Reverb
 A convolution reverb. 
   
-  
-  
 ================= CURRENT FEATURES =================     
 - Convolution reverb is applied to an input by way of  
 an impulse response, and the output is saved as a  

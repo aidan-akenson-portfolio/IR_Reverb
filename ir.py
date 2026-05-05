@@ -33,21 +33,21 @@ def sine_440(bitrate: int = DEFAULT_BITRATE):
     return sine_wave
 
 class IR():
-    def __init__(self, ir_file: str = "", input: str = ""):
+    def __init__(self, ir: str = "", input: str = ""):
 
         # Select appropriate impulse response
-        match ir_file:
-            case "":
+        match ir:
+            case "" | "1" | "noise-1" | "massive":
                 self._ir, self._ir_bitrate = sf.read(file="ir_demo_1_filtered_white_noise_massive.wav", always_2d=True)
+            case "2" | "noise-2" | "surge" | "surge-xt":
+                self._ir, self._ir_bitrate = sf.read(file="ir_demo_2_filtered_noise_surge_xt.wav", always_2d=True)
             case _:
-                print("Command line arguments and user-supplied impulse responses are currently unsupported!")
+                assert pl.Path(input).resolve().is_file(), f"File {input} does not exist!"
+                self._ir, self._ir_bitrate  = sf.read(file=input, always_2d=True)
 
         # Import the input signal as a SoundFile object, or use a sine wave if none provided
         match input:
-            case "":
-                self._input = sine_440()
-                self._input_bitrate = DEFAULT_BITRATE
-            case "sine":
+            case "" | "sine":
                 self._input = sine_440()
                 self._input_bitrate = DEFAULT_BITRATE
             case "arp":
@@ -80,6 +80,6 @@ class IR():
                 samplerate=self._input_bitrate)
         
 if __name__ == "__main__":
-    ir = IR(input="sine")
-    ir = IR(input="arp")
+    ir = IR(ir="surge", input="sine")
+    ir = IR(ir="surge", input="arp")
     quit()
